@@ -1,0 +1,3357 @@
+-- ============================================================
+--                 ISLERRTOPIA BASE TABLET
+--              CC:Tweaked Advanced Pocket PC
+-- ============================================================
+
+
+-- ============================================================
+-- NETWORK CONFIGURATION
+-- ============================================================
+
+local DOOR_PROTOCOL = "islerrtopia_door"
+local DOOR_HOST = "islerrtopia_door_master"
+
+local SECURITY_PROTOCOL = "islerrtopia_security"
+local SECURITY_HOST = "islerrtopia_security_master"
+
+local AUDIO_PROTOCOL = "islerrtopia_audio"
+
+local POWER_PROTOCOL = "islerrtopia_power"
+local POWER_HOST = "islerrtopia_power_master"
+
+local STEAM_PROTOCOL = "islerrtopia_steam_master"
+local STEAM_HOST = "islerrtopia_steam_master"
+
+local LIGHTS_PROTOCOL = "islerrtopia_lights"
+local LIGHTS_HOST = "islerrtopia_lights_master"
+
+local RESPONSE_TIMEOUT = 2
+
+
+-- ============================================================
+-- SETTINGS
+-- ============================================================
+
+local SILENT_LOCKDOWN_KEY =
+    "islerrtopia.silent_lockdown"
+
+pcall(function()
+
+    settings.define(
+        SILENT_LOCKDOWN_KEY,
+        {
+            description =
+                "Disable alarm audio during lockdown",
+
+            default = false,
+            type = "boolean"
+        }
+    )
+
+end)
+
+settings.load()
+
+local silentLockdown =
+    settings.get(SILENT_LOCKDOWN_KEY)
+
+if silentLockdown == nil then
+    silentLockdown = false
+end
+
+
+-- ============================================================
+-- TERMINAL
+-- ============================================================
+
+local W, H = term.getSize()
+
+
+-- ============================================================
+-- THEMES
+-- ============================================================
+
+local BRASS = {
+
+    bg = colors.black,
+
+    panel = colors.brown,
+
+    title = colors.yellow,
+
+    border = colors.orange,
+
+    text = colors.white,
+
+    muted = colors.lightGray,
+
+    good = colors.lime,
+
+    bad = colors.red,
+
+    accent = colors.yellow
+}
+
+
+local FE = {
+
+    bg = colors.black,
+
+    panel = colors.gray,
+
+    title = colors.orange,
+
+    border = colors.orange,
+
+    text = colors.white,
+
+    muted = colors.lightGray,
+
+    good = colors.lime,
+
+    bad = colors.red,
+
+    accent = colors.orange
+}
+
+
+-- ============================================================
+-- UI STATE
+-- ============================================================
+
+local activeTheme = BRASS
+
+local buttons = {}
+
+local page = "MAIN"
+
+local utilityPage = 1
+
+local speakerPage = 1
+
+
+-- ============================================================
+-- TEXT HELPERS
+-- ============================================================
+
+local function fit(text, width)
+
+    text = tostring(text or "")
+
+    if width <= 0 then
+        return ""
+    end
+
+    if #text <= width then
+        return text
+    end
+
+    if width <= 3 then
+        return text:sub(1, width)
+    end
+
+    return text:sub(
+        1,
+        width - 3
+    ) .. "..."
+
+end
+
+
+local function clearLine(
+    y,
+    background
+)
+
+    term.setBackgroundColor(
+        background
+        or activeTheme.bg
+    )
+
+    term.setCursorPos(
+        1,
+        y
+    )
+
+    term.write(
+        string.rep(
+            " ",
+            W
+        )
+    )
+
+end
+
+
+local function center(
+    y,
+    text,
+    color,
+    background
+)
+
+    text = fit(
+        text,
+        W
+    )
+
+    term.setBackgroundColor(
+        background
+        or activeTheme.bg
+    )
+
+    term.setTextColor(
+        color
+        or activeTheme.text
+    )
+
+    local x =
+        math.floor(
+            (W - #text) / 2
+        ) + 1
+
+    term.setCursorPos(
+        math.max(
+            1,
+            x
+        ),
+        y
+    )
+
+    term.write(text)
+
+end
+
+
+local function clear(theme)
+
+    activeTheme =
+        theme
+        or BRASS
+
+    term.setBackgroundColor(
+        activeTheme.bg
+    )
+
+    term.setTextColor(
+        activeTheme.text
+    )
+
+    term.clear()
+
+    term.setCursorPos(
+        1,
+        1
+    )
+
+    buttons = {}
+
+end
+
+
+-- ============================================================
+-- HEADER
+-- ============================================================
+
+local function header(
+    title,
+    subtitle,
+    theme
+)
+
+    clear(theme)
+
+    for y = 1, 3 do
+
+        clearLine(
+            y,
+            activeTheme.panel
+        )
+
+    end
+
+    center(
+        2,
+        title,
+        activeTheme.title,
+        activeTheme.panel
+    )
+
+    if subtitle
+    and subtitle ~= "" then
+
+        center(
+            4,
+            subtitle,
+            activeTheme.muted
+        )
+
+    end
+
+end
+
+
+-- ============================================================
+-- STATUS LINE
+-- ============================================================
+
+local function setStatus(
+    text,
+    color
+)
+
+    local y =
+        H - 2
+
+    clearLine(y)
+
+    center(
+        y,
+        text,
+        color
+        or activeTheme.muted
+    )
+
+end
+
+
+-- ============================================================
+-- BUTTON SYSTEM
+-- ============================================================
+
+local function addButton(
+    x,
+    y,
+    width,
+    text,
+    action,
+    theme
+)
+
+    theme =
+        theme
+        or activeTheme
+
+    local maxWidth =
+        W - x + 1
+
+    width =
+        math.min(
+            width,
+            maxWidth
+        )
+
+    if width < 5 then
+        return
+    end
+
+    local right =
+        x + width - 1
+
+
+    term.setBackgroundColor(
+        theme.bg
+    )
+
+    term.setTextColor(
+        theme.border
+    )
+
+
+    term.setCursorPos(
+        x,
+        y
+    )
+
+    term.write(
+        "+"
+        ..
+        string.rep(
+            "-",
+            width - 2
+        )
+        ..
+        "+"
+    )
+
+
+    term.setCursorPos(
+        x,
+        y + 1
+    )
+
+    term.write("|")
+
+
+    term.setCursorPos(
+        right,
+        y + 1
+    )
+
+    term.write("|")
+
+
+    term.setCursorPos(
+        x,
+        y + 2
+    )
+
+    term.write(
+        "+"
+        ..
+        string.rep(
+            "-",
+            width - 2
+        )
+        ..
+        "+"
+    )
+
+
+    local display =
+        fit(
+            text,
+            width - 4
+        )
+
+
+    local tx =
+        x
+        +
+        math.floor(
+            (
+                width
+                -
+                #display
+            ) / 2
+        )
+
+
+    term.setCursorPos(
+        tx,
+        y + 1
+    )
+
+    term.setTextColor(
+        theme.text
+    )
+
+    term.write(display)
+
+
+    table.insert(
+        buttons,
+        {
+
+            x1 = x,
+
+            y1 = y,
+
+            x2 = right,
+
+            y2 = y + 2,
+
+            action = action
+        }
+    )
+
+end
+
+
+local function centeredButton(
+    y,
+    text,
+    action,
+    theme,
+    requestedWidth
+)
+
+    local width =
+        math.min(
+            requestedWidth
+            or 22,
+
+            W - 4
+        )
+
+    local x =
+        math.floor(
+            (
+                W
+                -
+                width
+            ) / 2
+        ) + 1
+
+    addButton(
+        x,
+        y,
+        width,
+        text,
+        action,
+        theme
+    )
+
+end
+
+
+-- ============================================================
+-- TWO COLUMN BUTTONS
+-- ============================================================
+
+local function twoColumnButton(
+    column,
+    y,
+    text,
+    action,
+    theme
+)
+
+    local gap = 2
+
+    local width =
+        math.floor(
+            (
+                W
+                -
+                gap
+                -
+                2
+            ) / 2
+        )
+
+    local x
+
+    if column == 1 then
+
+        x = 1
+
+    else
+
+        x =
+            W
+            -
+            width
+            +
+            1
+
+    end
+
+
+    addButton(
+        x,
+        y,
+        width,
+        text,
+        action,
+        theme
+    )
+
+end
+
+
+-- ============================================================
+-- FOOTERS
+-- ============================================================
+
+local function footerBack()
+
+    term.setBackgroundColor(
+        activeTheme.bg
+    )
+
+    term.setTextColor(
+        activeTheme.muted
+    )
+
+    term.setCursorPos(
+        2,
+        H
+    )
+
+    term.write(
+        "< BACK"
+    )
+
+end
+
+
+local function footerBackRefresh()
+
+    footerBack()
+
+    local refresh =
+        "REFRESH >"
+
+    term.setCursorPos(
+        math.max(
+            1,
+            W
+            -
+            #refresh
+            -
+            1
+        ),
+        H
+    )
+
+    term.write(refresh)
+
+end
+
+
+local function footerPager(
+    number,
+    maximum
+)
+
+    term.setBackgroundColor(
+        activeTheme.bg
+    )
+
+    term.setTextColor(
+        activeTheme.muted
+    )
+
+
+    term.setCursorPos(
+        2,
+        H
+    )
+
+    term.write("<")
+
+
+    local back = "BACK"
+
+    term.setCursorPos(
+        math.floor(
+            (
+                W
+                -
+                #back
+            ) / 2
+        ) + 1,
+        H
+    )
+
+    term.write(back)
+
+
+    term.setCursorPos(
+        W - 1,
+        H
+    )
+
+    term.write(">")
+
+
+    center(
+        H - 1,
+        tostring(number)
+        ..
+        "/"
+        ..
+        tostring(maximum),
+        activeTheme.muted
+    )
+
+end
+
+
+-- ============================================================
+-- TELEMETRY LABELS
+-- ============================================================
+
+local function dataLabel(
+    y,
+    left,
+    right,
+    theme
+)
+
+    theme =
+        theme
+        or activeTheme
+
+    clearLine(
+        y,
+        theme.bg
+    )
+
+
+    term.setBackgroundColor(
+        theme.bg
+    )
+
+    term.setTextColor(
+        theme.muted
+    )
+
+    term.setCursorPos(
+        2,
+        y
+    )
+
+    term.write(
+        fit(
+            left,
+            math.floor(
+                W * 0.55
+            )
+        )
+    )
+
+
+    if right ~= nil then
+
+        local value =
+            fit(
+                tostring(right),
+                W - 3
+            )
+
+        local x =
+            math.max(
+                2,
+                W - #value
+            )
+
+        term.setCursorPos(
+            x,
+            y
+        )
+
+        term.setTextColor(
+            theme.text
+        )
+
+        term.write(value)
+
+    end
+
+end
+
+
+-- ============================================================
+-- NUMBER FORMATTING
+-- ============================================================
+
+local function formatNumber(n)
+
+    n =
+        tonumber(n)
+
+    if not n then
+        return "N/A"
+    end
+
+
+    local absolute =
+        math.abs(n)
+
+
+    if absolute
+    >= 1000000000000 then
+
+        return string.format(
+            "%.2fT",
+            n / 1000000000000
+        )
+
+
+    elseif absolute
+    >= 1000000000 then
+
+        return string.format(
+            "%.2fG",
+            n / 1000000000
+        )
+
+
+    elseif absolute
+    >= 1000000 then
+
+        return string.format(
+            "%.2fM",
+            n / 1000000
+        )
+
+
+    elseif absolute
+    >= 1000 then
+
+        return string.format(
+            "%.1fk",
+            n / 1000
+        )
+
+    end
+
+
+    return string.format(
+        "%.0f",
+        n
+    )
+
+end
+
+
+local function formatPercent(n)
+
+    n =
+        tonumber(n)
+
+    if not n then
+        return "N/A"
+    end
+
+    return string.format(
+        "%.1f%%",
+        n
+    )
+
+end
+
+
+-- ============================================================
+-- WIRELESS MODEM
+-- ============================================================
+
+local function ensureModem()
+
+    local sides = {
+
+        "top",
+
+        "bottom",
+
+        "left",
+
+        "right",
+
+        "front",
+
+        "back"
+    }
+
+
+    for _, side
+    in ipairs(sides) do
+
+        if peripheral.getType(side)
+        == "modem" then
+
+            if not rednet.isOpen(side) then
+
+                rednet.open(side)
+
+            end
+
+            return true
+
+        end
+
+    end
+
+
+    return false
+
+end
+
+
+-- ============================================================
+-- REDNET HOST LOOKUP
+-- ============================================================
+
+local function findHost(
+    protocol,
+    hostname
+)
+
+    local id =
+        rednet.lookup(
+            protocol,
+            hostname
+        )
+
+    if type(id)
+    == "number" then
+
+        return id
+
+    end
+
+    return nil
+
+end
+
+
+-- ============================================================
+-- SEND WITHOUT WAITING FOR RESPONSE
+-- ============================================================
+
+local function sendToHost(
+    protocol,
+    hostname,
+    message
+)
+
+    local id =
+        findHost(
+            protocol,
+            hostname
+        )
+
+    if not id then
+
+        return false,
+            "MASTER OFFLINE"
+
+    end
+
+
+    rednet.send(
+        id,
+        message,
+        protocol
+    )
+
+    return true,
+        id
+
+end
+
+
+-- ============================================================
+-- SEND AND WAIT FOR RESPONSE
+-- ============================================================
+
+local function requestHost(
+    protocol,
+    hostname,
+    message,
+    timeout
+)
+
+    local okay,
+          idOrError =
+        sendToHost(
+            protocol,
+            hostname,
+            message
+        )
+
+
+    if not okay then
+
+        return nil,
+            idOrError
+
+    end
+
+
+    local id =
+        idOrError
+
+
+    local timer =
+        os.startTimer(
+            timeout
+            or RESPONSE_TIMEOUT
+        )
+
+
+    while true do
+
+        local event,
+              a,
+              b,
+              c =
+            os.pullEvent()
+
+
+        if event
+        == "rednet_message" then
+
+            local sender =
+                a
+
+            local response =
+                b
+
+            local receivedProtocol =
+                c
+
+
+            if sender == id
+            and receivedProtocol
+            == protocol then
+
+                return response
+
+            end
+
+
+        elseif event
+        == "timer"
+        and a == timer then
+
+            return nil,
+                "NO RESPONSE"
+
+        end
+
+    end
+
+end
+
+
+-- ============================================================
+-- DOOR SYSTEM
+-- ============================================================
+
+local function doorCommand(
+    command
+)
+
+    local okay,
+          result =
+        sendToHost(
+            DOOR_PROTOCOL,
+            DOOR_HOST,
+
+            {
+                type = "command",
+                command = command
+            }
+        )
+
+
+    if not okay then
+
+        return false,
+            result
+
+    end
+
+
+    return true,
+        command
+        ..
+        " SENT"
+
+end
+
+
+-- ============================================================
+-- SECURITY SYSTEM
+-- ============================================================
+
+local function securityCommand(
+    command
+)
+
+    local okay,
+          result =
+        sendToHost(
+            SECURITY_PROTOCOL,
+            SECURITY_HOST,
+
+            {
+                type = "security",
+                command = command
+            }
+        )
+
+
+    if not okay then
+
+        return false,
+            result
+
+    end
+
+
+    return true,
+        command
+        ..
+        " SENT"
+
+end
+
+
+-- ============================================================
+-- SPEAKER SYSTEM
+-- ============================================================
+
+local function speaker(
+    command
+)
+
+    rednet.broadcast(
+        command,
+        AUDIO_PROTOCOL
+    )
+
+end
+
+
+local function playSequence(
+    sequence,
+    delay
+)
+
+    delay =
+        delay
+        or 0.30
+
+
+    for i,
+        command
+    in ipairs(sequence) do
+
+        speaker(command)
+
+
+        if i
+        < #sequence then
+
+            sleep(delay)
+
+        end
+
+    end
+
+end
+
+
+-- ============================================================
+-- SPEAKER SEQUENCES
+-- ============================================================
+
+local function doubleChime()
+
+    playSequence(
+        {
+            "CHIME",
+            "CHIME"
+        },
+        0.35
+    )
+
+end
+
+
+local function alertSequence()
+
+    playSequence(
+        {
+            "WARNING",
+            "CHIME",
+            "WARNING"
+        },
+        0.35
+    )
+
+end
+
+
+local function goodNewsSequence()
+
+    playSequence(
+        {
+            "SUCCESS",
+            "CHIME"
+        },
+        0.35
+    )
+
+end
+
+
+local function victorySequence()
+
+    playSequence(
+        {
+            "SUCCESS",
+            "CHIME",
+            "SUCCESS",
+            "CHIME"
+        },
+        0.30
+    )
+
+end
+
+
+local function industrialBeat()
+
+    playSequence(
+        {
+            "CHIME",
+            "CHIME",
+            "WARNING",
+            "CHIME",
+            "SUCCESS"
+        },
+        0.25
+    )
+
+end
+
+
+local function announcementSequence()
+
+    playSequence(
+        {
+            "CHIME",
+            "CHIME",
+            "SUCCESS"
+        },
+        0.35
+    )
+
+end
+
+
+-- ============================================================
+-- LIGHTING SYSTEM
+-- ============================================================
+
+local function lightsCommand(
+    command
+)
+
+    local response,
+          err =
+        requestHost(
+            LIGHTS_PROTOCOL,
+            LIGHTS_HOST,
+
+            {
+                type = "lights",
+                command = command
+            },
+
+            2
+        )
+
+
+    if not response then
+
+        return false,
+            err
+
+    end
+
+
+    if type(response)
+    ~= "table" then
+
+        return false,
+            "BAD RESPONSE"
+
+    end
+
+
+    if response.type
+    ~= "lights_response" then
+
+        return false,
+            "BAD RESPONSE"
+
+    end
+
+
+    if response.success
+    ~= true then
+
+        return false,
+            response.name
+            or "COMMAND FAILED"
+
+    end
+
+
+    return true,
+        response.name
+        or "PULSE SENT"
+
+end
+
+
+-- ============================================================
+-- INDUCTION MATRIX TELEMETRY
+-- ============================================================
+
+local function getMatrixStatus()
+
+    local response,
+          err =
+        requestHost(
+            POWER_PROTOCOL,
+            POWER_HOST,
+            "GET_STATUS",
+            2
+        )
+
+
+    if not response then
+
+        return nil,
+            err
+
+    end
+
+
+    if type(response)
+    ~= "table" then
+
+        return nil,
+            "BAD RESPONSE"
+
+    end
+
+
+    return response
+
+end
+
+
+-- ============================================================
+-- STEAM TELEMETRY
+-- ============================================================
+
+local function getSteamStatus()
+
+    local response,
+          err =
+        requestHost(
+            STEAM_PROTOCOL,
+            STEAM_HOST,
+            "GET_STATUS",
+            2
+        )
+
+
+    if not response then
+
+        return nil,
+            err
+
+    end
+
+
+    if type(response)
+    ~= "table" then
+
+        return nil,
+            "BAD RESPONSE"
+
+    end
+
+
+    return response
+
+end
+
+
+-- ============================================================
+-- LOCKDOWN
+-- ============================================================
+
+local function performLockdown()
+
+    setStatus(
+        "CLOSING ENTRANCE...",
+        BRASS.accent
+    )
+
+
+    local okay,
+          err =
+        doorCommand(
+            "CLOSE"
+        )
+
+
+    if not okay then
+
+        setStatus(
+            err,
+            BRASS.bad
+        )
+
+        sleep(1.2)
+
+        return
+
+    end
+
+
+    -- Door takes roughly 4.5 seconds.
+    -- Five seconds guarantees it is closed
+    -- before the Tesla grid activates.
+
+    sleep(5)
+
+
+    setStatus(
+        "ARMING TESLA GRID...",
+        BRASS.accent
+    )
+
+
+    okay,
+    err =
+        securityCommand(
+            "ON"
+        )
+
+
+    if not okay then
+
+        setStatus(
+            err,
+            BRASS.bad
+        )
+
+        sleep(1.2)
+
+        return
+
+    end
+
+
+    if not silentLockdown then
+
+        speaker(
+            "ALARM_ON"
+        )
+
+    end
+
+
+    if silentLockdown then
+
+        setStatus(
+            "LOCKDOWN - SILENT",
+            BRASS.bad
+        )
+
+    else
+
+        setStatus(
+            "LOCKDOWN ACTIVE",
+            BRASS.bad
+        )
+
+    end
+
+
+    sleep(1.2)
+
+end
+
+
+-- ============================================================
+-- ALL CLEAR
+-- ============================================================
+
+local function performAllClear()
+
+    setStatus(
+        "ALL CLEAR...",
+        BRASS.good
+    )
+
+
+    speaker(
+        "ALARM_OFF"
+    )
+
+
+    securityCommand(
+        "OFF"
+    )
+
+
+    doorCommand(
+        "OPEN"
+    )
+
+
+    sleep(1.2)
+
+end
+
+
+-- ============================================================
+-- MAIN PAGE
+-- ============================================================
+
+local function drawMain()
+
+    header(
+        "ISLERRTOPIA OS",
+        "BASE CONTROL TABLET",
+        BRASS
+    )
+
+
+    centeredButton(
+        7,
+        "UTILITIES",
+
+        function()
+
+            utilityPage = 1
+
+            page =
+                "UTILITIES"
+
+        end
+    )
+
+
+    centeredButton(
+        12,
+        "INFORMATION",
+
+        function()
+
+            page =
+                "INFORMATION"
+
+        end
+    )
+
+
+    setStatus(
+        "SYSTEM READY",
+        BRASS.good
+    )
+
+end
+
+
+-- ============================================================
+-- UTILITIES
+-- ============================================================
+
+local function drawUtilities()
+
+    header(
+        "UTILITIES",
+        "BASE SYSTEMS",
+        BRASS
+    )
+
+
+    if utilityPage
+    == 1 then
+
+
+        centeredButton(
+            6,
+            "ENTRANCES",
+
+            function()
+
+                page =
+                    "ENTRANCES"
+
+            end
+        )
+
+
+        centeredButton(
+            10,
+            "SECURITY",
+
+            function()
+
+                page =
+                    "SECURITY"
+
+            end
+        )
+
+
+        centeredButton(
+            14,
+            "SPEAKER SYSTEM",
+
+            function()
+
+                speakerPage = 1
+
+                page =
+                    "SPEAKERS"
+
+            end
+        )
+
+
+    else
+
+
+        centeredButton(
+            6,
+            "LIGHTING SYSTEM",
+
+            function()
+
+                page =
+                    "LIGHTING"
+
+            end
+        )
+
+
+        centeredButton(
+            10,
+            "TERMINAL",
+
+            function()
+
+                page =
+                    "__TERMINAL__"
+
+            end
+        )
+
+
+        centeredButton(
+            14,
+            "GENERAL SETTINGS",
+
+            function()
+
+                page =
+                    "SETTINGS"
+
+            end
+        )
+
+    end
+
+
+    footerPager(
+        utilityPage,
+        2
+    )
+
+end
+
+
+-- ============================================================
+-- ENTRANCE MENU
+-- ============================================================
+
+local function drawEntrances()
+
+    header(
+        "ENTRANCES",
+        "ACCESS CONTROL",
+        BRASS
+    )
+
+
+    centeredButton(
+        8,
+        "MAIN ENTRANCE",
+
+        function()
+
+            page =
+                "MAIN_ENTRANCE"
+
+        end
+    )
+
+
+    footerBack()
+
+end
+
+
+-- ============================================================
+-- MAIN DOOR
+-- ============================================================
+
+local function drawMainEntrance()
+
+    header(
+        "MAIN ENTRANCE",
+        "ROPE PULLEY DOOR",
+        BRASS
+    )
+
+
+    centeredButton(
+        7,
+        "OPEN",
+
+        function()
+
+            setStatus(
+                "SENDING OPEN...",
+                BRASS.accent
+            )
+
+
+            local okay,
+                  message =
+                doorCommand(
+                    "OPEN"
+                )
+
+
+            if okay then
+
+                setStatus(
+                    "OPEN COMMAND SENT",
+                    BRASS.good
+                )
+
+            else
+
+                setStatus(
+                    message,
+                    BRASS.bad
+                )
+
+            end
+
+
+            sleep(0.8)
+
+        end
+    )
+
+
+    centeredButton(
+        12,
+        "CLOSE",
+
+        function()
+
+            setStatus(
+                "SENDING CLOSE...",
+                BRASS.accent
+            )
+
+
+            local okay,
+                  message =
+                doorCommand(
+                    "CLOSE"
+                )
+
+
+            if okay then
+
+                setStatus(
+                    "CLOSE COMMAND SENT",
+                    BRASS.good
+                )
+
+            else
+
+                setStatus(
+                    message,
+                    BRASS.bad
+                )
+
+            end
+
+
+            sleep(0.8)
+
+        end
+    )
+
+
+    footerBack()
+
+end
+
+
+-- ============================================================
+-- SECURITY MENU
+-- ============================================================
+
+local function drawSecurity()
+
+    header(
+        "SECURITY",
+        "DEFENCE SYSTEMS",
+        BRASS
+    )
+
+
+    centeredButton(
+        7,
+        "TESLA GRID",
+
+        function()
+
+            page =
+                "TESLA"
+
+        end
+    )
+
+
+    centeredButton(
+        12,
+        "LOCKDOWN",
+
+        function()
+
+            page =
+                "LOCKDOWN"
+
+        end
+    )
+
+
+    footerBack()
+
+end
+
+
+-- ============================================================
+-- TESLA GRID
+-- ============================================================
+
+local function drawTesla()
+
+    header(
+        "TESLA GRID",
+        "BASE DEFENCE",
+        BRASS
+    )
+
+
+    centeredButton(
+        7,
+        "TESLA ON",
+
+        function()
+
+            setStatus(
+                "ARMING...",
+                BRASS.accent
+            )
+
+
+            local okay,
+                  message =
+                securityCommand(
+                    "ON"
+                )
+
+
+            if okay then
+
+                setStatus(
+                    "TESLA GRID ARMED",
+                    BRASS.good
+                )
+
+            else
+
+                setStatus(
+                    message,
+                    BRASS.bad
+                )
+
+            end
+
+
+            sleep(0.8)
+
+        end
+    )
+
+
+    centeredButton(
+        12,
+        "TESLA OFF",
+
+        function()
+
+            setStatus(
+                "DISARMING...",
+                BRASS.accent
+            )
+
+
+            local okay,
+                  message =
+                securityCommand(
+                    "OFF"
+                )
+
+
+            if okay then
+
+                setStatus(
+                    "TESLA GRID SAFE",
+                    BRASS.good
+                )
+
+            else
+
+                setStatus(
+                    message,
+                    BRASS.bad
+                )
+
+            end
+
+
+            sleep(0.8)
+
+        end
+    )
+
+
+    footerBack()
+
+end
+
+
+-- ============================================================
+-- LOCKDOWN PAGE
+-- ============================================================
+
+local function drawLockdown()
+
+    header(
+        "LOCKDOWN",
+        "EMERGENCY CONTROL",
+        BRASS
+    )
+
+
+    if silentLockdown then
+
+        center(
+            6,
+            "ALARM: SILENT",
+            BRASS.muted
+        )
+
+    else
+
+        center(
+            6,
+            "ALARM: ENABLED",
+            BRASS.bad
+        )
+
+    end
+
+
+    centeredButton(
+        9,
+        "ACTIVATE",
+
+        function()
+
+            performLockdown()
+
+        end
+    )
+
+
+    centeredButton(
+        13,
+        "ALL CLEAR",
+
+        function()
+
+            performAllClear()
+
+        end
+    )
+
+
+    footerBack()
+
+end
+
+
+-- ============================================================
+-- SPEAKER ACTION HELPERS
+-- ============================================================
+
+local function speakerAction(
+    command,
+    message
+)
+
+    speaker(command)
+
+    setStatus(
+        message,
+        BRASS.good
+    )
+
+    sleep(0.5)
+
+end
+
+
+local function sequenceAction(
+    sequenceFunction,
+    message
+)
+
+    setStatus(
+        "PLAYING...",
+        BRASS.accent
+    )
+
+
+    sequenceFunction()
+
+
+    setStatus(
+        message,
+        BRASS.good
+    )
+
+
+    sleep(0.5)
+
+end
+
+
+-- ============================================================
+-- SPEAKER SYSTEM
+-- ============================================================
+
+local function drawSpeakers()
+
+    header(
+        "SPEAKER SYSTEM",
+
+        speakerPage == 1
+        and "SIGNALS"
+        or "SEQUENCES",
+
+        BRASS
+    )
+
+
+    if speakerPage
+    == 1 then
+
+
+        twoColumnButton(
+            1,
+            6,
+            "CHIME",
+
+            function()
+
+                speakerAction(
+                    "CHIME",
+                    "CHIME SENT"
+                )
+
+            end
+        )
+
+
+        twoColumnButton(
+            2,
+            6,
+            "WARNING",
+
+            function()
+
+                speakerAction(
+                    "WARNING",
+                    "WARNING SENT"
+                )
+
+            end
+        )
+
+
+        twoColumnButton(
+            1,
+            10,
+            "SUCCESS",
+
+            function()
+
+                speakerAction(
+                    "SUCCESS",
+                    "SUCCESS SENT"
+                )
+
+            end
+        )
+
+
+        twoColumnButton(
+            2,
+            10,
+            "ALARM",
+
+            function()
+
+                speakerAction(
+                    "ALARM_ON",
+                    "ALARM STARTED"
+                )
+
+            end
+        )
+
+
+        twoColumnButton(
+            1,
+            14,
+            "STOP ALARM",
+
+            function()
+
+                speakerAction(
+                    "ALARM_OFF",
+                    "ALARM STOPPED"
+                )
+
+            end
+        )
+
+
+        twoColumnButton(
+            2,
+            14,
+            "DOUBLE",
+
+            function()
+
+                sequenceAction(
+                    doubleChime,
+                    "DOUBLE CHIME"
+                )
+
+            end
+        )
+
+
+    else
+
+
+        twoColumnButton(
+            1,
+            6,
+            "ALERT SEQ",
+
+            function()
+
+                sequenceAction(
+                    alertSequence,
+                    "ALERT COMPLETE"
+                )
+
+            end
+        )
+
+
+        twoColumnButton(
+            2,
+            6,
+            "GOOD NEWS",
+
+            function()
+
+                sequenceAction(
+                    goodNewsSequence,
+                    "GOOD NEWS SENT"
+                )
+
+            end
+        )
+
+
+        twoColumnButton(
+            1,
+            10,
+            "VICTORY",
+
+            function()
+
+                sequenceAction(
+                    victorySequence,
+                    "VICTORY COMPLETE"
+                )
+
+            end
+        )
+
+
+        twoColumnButton(
+            2,
+            10,
+            "INDUS BEAT",
+
+            function()
+
+                sequenceAction(
+                    industrialBeat,
+                    "BEAT COMPLETE"
+                )
+
+            end
+        )
+
+
+        centeredButton(
+            14,
+            "ANNOUNCEMENT",
+
+            function()
+
+                sequenceAction(
+                    announcementSequence,
+                    "ANNOUNCEMENT SENT"
+                )
+
+            end
+        )
+
+    end
+
+
+    footerPager(
+        speakerPage,
+        2
+    )
+
+end
+
+
+-- ============================================================
+-- LIGHT ACTION
+-- ============================================================
+
+local function toggleLights(
+    command,
+    name
+)
+
+    setStatus(
+        "SENDING 0.5s PULSE...",
+        BRASS.accent
+    )
+
+
+    local okay,
+          message =
+        lightsCommand(
+            command
+        )
+
+
+    if okay then
+
+        setStatus(
+            name
+            ..
+            " TOGGLED",
+            BRASS.good
+        )
+
+    else
+
+        setStatus(
+            message,
+            BRASS.bad
+        )
+
+    end
+
+
+    sleep(0.7)
+
+end
+
+
+-- ============================================================
+-- LIGHTING SYSTEM
+-- ============================================================
+
+local function drawLighting()
+
+    header(
+        "LIGHTING CONTROL",
+        "LATCH PULSE SYSTEM",
+        BRASS
+    )
+
+
+    twoColumnButton(
+        1,
+        7,
+        "CREATE AREA",
+
+        function()
+
+            toggleLights(
+                "TOGGLE_CREATE",
+                "CREATE AREA"
+            )
+
+        end
+    )
+
+
+    twoColumnButton(
+        2,
+        7,
+        "HALLWAY",
+
+        function()
+
+            toggleLights(
+                "TOGGLE_HALLWAY",
+                "HALLWAY"
+            )
+
+        end
+    )
+
+
+    twoColumnButton(
+        1,
+        12,
+        "FARM AREA",
+
+        function()
+
+            toggleLights(
+                "TOGGLE_FARM",
+                "FARM AREA"
+            )
+
+        end
+    )
+
+
+    twoColumnButton(
+        2,
+        12,
+        "ALL LIGHTS",
+
+        function()
+
+            toggleLights(
+                "TOGGLE_ALL",
+                "ALL LIGHTS"
+            )
+
+        end
+    )
+
+
+    footerBack()
+
+end
+
+
+-- ============================================================
+-- GENERAL SETTINGS
+-- ============================================================
+
+local function drawSettings()
+
+    header(
+        "GENERAL SETTINGS",
+        "TABLET CONFIGURATION",
+        BRASS
+    )
+
+
+    center(
+        7,
+        "SILENT LOCKDOWN",
+        BRASS.text
+    )
+
+
+    if silentLockdown then
+
+        center(
+            9,
+            "[ ON ]",
+            BRASS.good
+        )
+
+    else
+
+        center(
+            9,
+            "[ OFF ]",
+            BRASS.bad
+        )
+
+    end
+
+
+    centeredButton(
+        12,
+        "TOGGLE",
+
+        function()
+
+            silentLockdown =
+                not silentLockdown
+
+
+            settings.set(
+                SILENT_LOCKDOWN_KEY,
+                silentLockdown
+            )
+
+
+            settings.save()
+
+        end
+    )
+
+
+    footerBack()
+
+end
+
+
+-- ============================================================
+-- INFORMATION MENU
+-- ============================================================
+
+local function drawInformation()
+
+    header(
+        "INFORMATION",
+        "BASE TELEMETRY",
+        BRASS
+    )
+
+
+    centeredButton(
+        8,
+        "POWER GRID",
+
+        function()
+
+            page =
+                "POWER_GRID"
+
+        end
+    )
+
+
+    footerBack()
+
+end
+
+
+-- ============================================================
+-- POWER GRID
+-- ============================================================
+
+local function drawPowerGrid()
+
+    header(
+        "POWER GRID",
+        "ENERGY SYSTEMS",
+        BRASS
+    )
+
+
+    centeredButton(
+        7,
+        "FE",
+
+        function()
+
+            page =
+                "FE"
+
+        end
+    )
+
+
+    centeredButton(
+        12,
+        "SU",
+
+        function()
+
+            page =
+                "SU"
+
+        end
+    )
+
+
+    footerBack()
+
+end
+
+
+-- ============================================================
+-- FE MENU
+-- ============================================================
+
+local function drawFE()
+
+    header(
+        "FE GRID",
+        "MEKANISM ENERGY",
+        FE
+    )
+
+
+    centeredButton(
+        8,
+        "INDUCTION MATRIX",
+
+        function()
+
+            page =
+                "MATRIX"
+
+        end,
+
+        FE
+    )
+
+
+    footerBack()
+
+end
+
+
+-- ============================================================
+-- INDUCTION MATRIX
+-- ============================================================
+
+local function drawMatrix()
+
+    header(
+        "INDUCTION MATRIX",
+        "LIVE FE TELEMETRY",
+        FE
+    )
+
+
+    setStatus(
+        "FETCHING...",
+        FE.accent
+    )
+
+
+    local data,
+          err =
+        getMatrixStatus()
+
+
+    clearLine(
+        H - 2
+    )
+
+
+    if not data then
+
+        center(
+            9,
+            err
+            or "NO DATA",
+            FE.bad
+        )
+
+        footerBackRefresh()
+
+        return
+
+    end
+
+
+    dataLabel(
+        6,
+        "STORED",
+        formatNumber(
+            data.stored
+        )
+        ..
+        " FE",
+        FE
+    )
+
+
+    dataLabel(
+        8,
+        "CAPACITY",
+        formatNumber(
+            data.capacity
+        )
+        ..
+        " FE",
+        FE
+    )
+
+
+    dataLabel(
+        10,
+        "CHARGE",
+        formatPercent(
+            data.percent
+        ),
+        FE
+    )
+
+
+    dataLabel(
+        12,
+        "INPUT",
+        formatNumber(
+            data.input
+        )
+        ..
+        " FE/t",
+        FE
+    )
+
+
+    dataLabel(
+        14,
+        "OUTPUT",
+        formatNumber(
+            data.output
+        )
+        ..
+        " FE/t",
+        FE
+    )
+
+
+    dataLabel(
+        16,
+        "NET",
+        formatNumber(
+            data.net
+        )
+        ..
+        " FE/t",
+        FE
+    )
+
+
+    footerBackRefresh()
+
+end
+
+
+-- ============================================================
+-- SU MENU
+-- ============================================================
+
+local function drawSU()
+
+    header(
+        "SU GRID",
+        "CREATE KINETICS",
+        BRASS
+    )
+
+
+    centeredButton(
+        8,
+        "STEAM PLANT",
+
+        function()
+
+            page =
+                "STEAM"
+
+        end
+    )
+
+
+    footerBack()
+
+end
+
+
+-- ============================================================
+-- STEAM PLANT
+-- ============================================================
+
+local function drawSteam()
+
+    header(
+        "STEAM PLANT",
+        "LIVE SU TELEMETRY",
+        BRASS
+    )
+
+
+    setStatus(
+        "FETCHING...",
+        BRASS.accent
+    )
+
+
+    local data,
+          err =
+        getSteamStatus()
+
+
+    clearLine(
+        H - 2
+    )
+
+
+    if not data then
+
+        center(
+            9,
+            err
+            or "NO DATA",
+            BRASS.bad
+        )
+
+        footerBackRefresh()
+
+        return
+
+    end
+
+
+    local summary =
+        data.summary
+        or {}
+
+
+    dataLabel(
+        6,
+        "ENGINES",
+
+        tostring(
+            summary.enginesOnline
+            or 0
+        )
+        ..
+        "/"
+        ..
+        tostring(
+            summary.expectedEngines
+            or 3
+        )
+    )
+
+
+    dataLabel(
+        8,
+        "AVG RPM",
+        formatNumber(
+            summary.avgRPM
+        )
+    )
+
+
+    dataLabel(
+        10,
+        "CAPACITY",
+
+        formatNumber(
+            summary.totalCapacity
+        )
+        ..
+        " SU"
+    )
+
+
+    dataLabel(
+        12,
+        "USED",
+
+        formatNumber(
+            summary.estimatedUsedSU
+        )
+        ..
+        " SU"
+    )
+
+
+    dataLabel(
+        14,
+        "REMAINING",
+
+        formatNumber(
+            summary.estimatedRemainingSU
+        )
+        ..
+        " SU"
+    )
+
+
+    dataLabel(
+        16,
+        "LOAD",
+
+        formatPercent(
+            summary.stressPercent
+        )
+    )
+
+
+    footerBackRefresh()
+
+end
+
+
+-- ============================================================
+-- DRAW PAGE
+-- ============================================================
+
+local function drawPage()
+
+    if page
+    == "MAIN" then
+
+        drawMain()
+
+
+    elseif page
+    == "UTILITIES" then
+
+        drawUtilities()
+
+
+    elseif page
+    == "ENTRANCES" then
+
+        drawEntrances()
+
+
+    elseif page
+    == "MAIN_ENTRANCE" then
+
+        drawMainEntrance()
+
+
+    elseif page
+    == "SECURITY" then
+
+        drawSecurity()
+
+
+    elseif page
+    == "TESLA" then
+
+        drawTesla()
+
+
+    elseif page
+    == "LOCKDOWN" then
+
+        drawLockdown()
+
+
+    elseif page
+    == "SPEAKERS" then
+
+        drawSpeakers()
+
+
+    elseif page
+    == "LIGHTING" then
+
+        drawLighting()
+
+
+    elseif page
+    == "SETTINGS" then
+
+        drawSettings()
+
+
+    elseif page
+    == "INFORMATION" then
+
+        drawInformation()
+
+
+    elseif page
+    == "POWER_GRID" then
+
+        drawPowerGrid()
+
+
+    elseif page
+    == "FE" then
+
+        drawFE()
+
+
+    elseif page
+    == "MATRIX" then
+
+        drawMatrix()
+
+
+    elseif page
+    == "SU" then
+
+        drawSU()
+
+
+    elseif page
+    == "STEAM" then
+
+        drawSteam()
+
+    end
+
+end
+
+
+-- ============================================================
+-- BACK NAVIGATION
+-- ============================================================
+
+local function goBack()
+
+    if page
+    == "UTILITIES" then
+
+        page =
+            "MAIN"
+
+
+    elseif page
+    == "ENTRANCES" then
+
+        page =
+            "UTILITIES"
+
+
+    elseif page
+    == "MAIN_ENTRANCE" then
+
+        page =
+            "ENTRANCES"
+
+
+    elseif page
+    == "SECURITY" then
+
+        page =
+            "UTILITIES"
+
+
+    elseif page
+    == "TESLA" then
+
+        page =
+            "SECURITY"
+
+
+    elseif page
+    == "LOCKDOWN" then
+
+        page =
+            "SECURITY"
+
+
+    elseif page
+    == "SPEAKERS" then
+
+        page =
+            "UTILITIES"
+
+
+    elseif page
+    == "LIGHTING" then
+
+        page =
+            "UTILITIES"
+
+
+    elseif page
+    == "SETTINGS" then
+
+        page =
+            "UTILITIES"
+
+
+    elseif page
+    == "INFORMATION" then
+
+        page =
+            "MAIN"
+
+
+    elseif page
+    == "POWER_GRID" then
+
+        page =
+            "INFORMATION"
+
+
+    elseif page
+    == "FE" then
+
+        page =
+            "POWER_GRID"
+
+
+    elseif page
+    == "MATRIX" then
+
+        page =
+            "FE"
+
+
+    elseif page
+    == "SU" then
+
+        page =
+            "POWER_GRID"
+
+
+    elseif page
+    == "STEAM" then
+
+        page =
+            "SU"
+
+    end
+
+end
+
+
+-- ============================================================
+-- BUTTON HIT DETECTION
+-- ============================================================
+
+local function pressButton(
+    x,
+    y
+)
+
+    for _,
+        button
+    in ipairs(buttons) do
+
+
+        if x >= button.x1
+        and x <= button.x2
+        and y >= button.y1
+        and y <= button.y2 then
+
+
+            button.action()
+
+
+            return true
+
+        end
+
+    end
+
+
+    return false
+
+end
+
+
+-- ============================================================
+-- STARTUP MODEM CHECK
+-- ============================================================
+
+if not ensureModem() then
+
+    clear(BRASS)
+
+
+    center(
+        math.floor(
+            H / 2
+        ),
+        "NO WIRELESS MODEM",
+        BRASS.bad
+    )
+
+
+    center(
+        math.floor(
+            H / 2
+        ) + 2,
+        "TABLET CANNOT START",
+        BRASS.muted
+    )
+
+
+    return
+
+end
+
+
+-- ============================================================
+-- MAIN EVENT LOOP
+-- ============================================================
+
+while true do
+
+
+    -- ========================================================
+    -- TERMINAL EXIT
+    -- ========================================================
+
+    if page
+    == "__TERMINAL__" then
+
+
+        term.setBackgroundColor(
+            colors.black
+        )
+
+        term.setTextColor(
+            colors.white
+        )
+
+        term.clear()
+
+        term.setCursorPos(
+            1,
+            1
+        )
+
+
+        print(
+            "Exited ISLERRTOPIA OS."
+        )
+
+
+        print(
+            "Run 'tablet' to reopen."
+        )
+
+
+        return
+
+    end
+
+
+    -- ========================================================
+    -- DRAW CURRENT SCREEN
+    -- ========================================================
+
+    drawPage()
+
+
+    -- ========================================================
+    -- WAIT FOR EVENT
+    -- ========================================================
+
+    local event,
+          a,
+          b,
+          c =
+        os.pullEvent()
+
+
+    -- ========================================================
+    -- TOUCH / CLICK
+    -- ========================================================
+
+    if event
+    == "mouse_click" then
+
+
+        local x = b
+
+        local y = c
+
+
+        -- ====================================================
+        -- UTILITIES FOOTER
+        -- Must be checked before generic BACK.
+        -- ====================================================
+
+        if page
+        == "UTILITIES"
+        and y == H then
+
+
+            if x <= 3 then
+
+                utilityPage =
+                    math.max(
+                        1,
+                        utilityPage - 1
+                    )
+
+
+            elseif x
+            >= W - 2 then
+
+                utilityPage =
+                    math.min(
+                        2,
+                        utilityPage + 1
+                    )
+
+
+            elseif x
+            >= math.floor(
+                W / 2
+            ) - 3
+
+            and x
+            <= math.floor(
+                W / 2
+            ) + 3 then
+
+
+                page =
+                    "MAIN"
+
+            end
+
+
+        -- ====================================================
+        -- SPEAKER FOOTER
+        -- ====================================================
+
+        elseif page
+        == "SPEAKERS"
+        and y == H then
+
+
+            if x <= 3 then
+
+                speakerPage =
+                    math.max(
+                        1,
+                        speakerPage - 1
+                    )
+
+
+            elseif x
+            >= W - 2 then
+
+                speakerPage =
+                    math.min(
+                        2,
+                        speakerPage + 1
+                    )
+
+
+            elseif x
+            >= math.floor(
+                W / 2
+            ) - 3
+
+            and x
+            <= math.floor(
+                W / 2
+            ) + 3 then
+
+
+                page =
+                    "UTILITIES"
+
+            end
+
+
+        -- ====================================================
+        -- MATRIX FOOTER
+        -- ====================================================
+
+        elseif page
+        == "MATRIX"
+        and y == H then
+
+
+            if x <= 8 then
+
+                page =
+                    "FE"
+
+            else
+
+                -- Any click on REFRESH simply leaves
+                -- page unchanged. The next loop redraws
+                -- and requests fresh telemetry.
+
+                page =
+                    "MATRIX"
+
+            end
+
+
+        -- ====================================================
+        -- STEAM FOOTER
+        -- ====================================================
+
+        elseif page
+        == "STEAM"
+        and y == H then
+
+
+            if x <= 8 then
+
+                page =
+                    "SU"
+
+            else
+
+                page =
+                    "STEAM"
+
+            end
+
+
+        -- ====================================================
+        -- NORMAL BUTTONS
+        -- ====================================================
+
+        elseif pressButton(
+            x,
+            y
+        ) then
+
+
+            -- Button action already handled everything.
+
+
+        -- ====================================================
+        -- GENERIC BACK
+        -- ====================================================
+
+        elseif y == H
+        and x <= 8
+        and page ~= "MAIN" then
+
+
+            goBack()
+
+        end
+
+    end
+
+end
